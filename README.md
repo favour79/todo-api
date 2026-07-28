@@ -68,6 +68,64 @@ A small CRUD API for managing a to-do list, built with FastAPI. Built as part of
 
 
 
+\## Database
+
+
+
+This project now uses SQLite instead of an in-memory list. SQLite was chosen because it needs no separate server or installation — it's a single file, which is ideal for a learning project at this stage and mirrors how many production systems start before scaling to PostgreSQL or MySQL.
+
+
+
+The database file is created automatically the first time the app runs, at:
+
+todo-api/tasks.db
+
+
+
+The `tasks` table and 3 example rows are also created automatically on first run. Restarting the server no longer resets your data — this is the core change from Assignment 1.
+
+
+
+\### Example SQL query
+
+
+
+Run directly in DB Browser for SQLite:
+
+
+
+SELECT \* FROM tasks;
+
+
+
+Result:
+
+
+
+| id | title                          | done |
+
+|----|--------------------------------|------|
+
+| 5  | Buy milk                       | 0    |
+
+| 6  | Review loan file for Obligor A | 0    |
+
+| 7  | Submit weekly PAR report       | 1    |
+
+
+
+\### DB Browser screenshot
+
+
+
+!\[DB Browser screenshot](db-browser-screenshot.png)
+
+
+
+\##Note: no extra installation is needed for the database — Python's built-in sqlite3 module handles it.
+
+
+
 \## Example request
 
 
