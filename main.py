@@ -37,8 +37,6 @@ def init_db():
 
 init_db()
 
-tasks = []
-
 @app.get("/", summary="API info")
 def root():
     return {
@@ -59,6 +57,7 @@ def get_tasks():
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
 @app.get("/tasks/{task_id}", summary="Get one task by id")
 def get_task(task_id: int):
     conn = get_connection()
@@ -97,21 +96,45 @@ class TaskUpdate(BaseModel):
 
 @app.put("/tasks/{task_id}", summary="Update a task's title and/or done status")
 def update_task(task_id: int, update: TaskUpdate):
-    for task in tasks:
-        if task["id"] == task_id:
-            if update.title is not None:
-                if not update.title.strip():
-                    raise HTTPException(status_code=400, detail="Title cannot be empty")
-                task["title"] = update.title
-            if update.done is not None:
-                task["done"] = update.done
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    existing = cursor.fetchone()
 
+    if existing is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    new_title = existing["title"]
+    if update.title is not None:
+        if not update.title.strip():
+            conn.close()
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+        new_title = update.title
+
+    new_done = existing["done"]
+    if update.done is not None:
+        new_done = 1 if update.done else 0
+
+    cursor.execute(
+        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+        (new_title, new_done, task_id)
+    )
+    conn.commit()
+    conn.close()
+
+    return {"id": task_id, "title": new_title, "done": bool(new_done)}
 @app.delete("/tasks/{task_id}", status_code=204, summary="Delete a task")
 def delete_task(task_id: int):
-    for task in tasks:
-        if task["id"] == task_id:
-            tasks.remove(task)
-            return
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))
+    existing = cursor.fetchone()
+
+    if existing is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
