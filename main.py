@@ -1,41 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import sqlite3
+import repository
 
 app = FastAPI()
-
-DB_FILE = "tasks.db"
-
-def get_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            done BOOLEAN NOT NULL DEFAULT 0
-        )
-    """)
-    cursor.execute("SELECT COUNT(*) FROM tasks")
-    count = cursor.fetchone()[0]
-    if count == 0:
-        cursor.executemany(
-            "INSERT INTO tasks (title, done) VALUES (?, ?)",
-            [
-                ("Buy milk", 0),
-                ("Review loan file for Obligor A", 0),
-                ("Submit weekly PAR report", 1),
-            ]
-        )
-    conn.commit()
-    conn.close()
-
-init_db()
 
 @app.get("/", summary="API info")
 def root():
@@ -51,25 +18,14 @@ def health():
 
 @app.get("/tasks", summary="List all tasks")
 def get_tasks():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks")
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    return repository.get_all_tasks()
 
 @app.get("/tasks/{task_id}", summary="Get one task by id")
 def get_task(task_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if row is None:
+    task = repository.get_task_by_id(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    return dict(row)
-
-from pydantic import BaseModel
+    return task
 
 class TaskCreate(BaseModel):
     title: str
@@ -78,63 +34,23 @@ class TaskCreate(BaseModel):
 def create_task(task: TaskCreate):
     if not task.title or not task.title.strip():
         raise HTTPException(status_code=400, detail="Title is required and cannot be empty")
+    return repository.create_task(task.title)
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO tasks (title, done) VALUES (?, ?)",
-        (task.title, 0)
-    )
-    new_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-
-    return {"id": new_id, "title": task.title, "done": False}
 class TaskUpdate(BaseModel):
     title: str | None = None
     done: bool | None = None
 
 @app.put("/tasks/{task_id}", summary="Update a task's title and/or done status")
 def update_task(task_id: int, update: TaskUpdate):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-    existing = cursor.fetchone()
-
-    if existing is None:
-        conn.close()
+    if update.title is not None and not update.title.strip():
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+    updated = repository.update_task(task_id, title=update.title, done=update.done)
+    if updated is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return updated
 
-    new_title = existing["title"]
-    if update.title is not None:
-        if not update.title.strip():
-            conn.close()
-            raise HTTPException(status_code=400, detail="Title cannot be empty")
-        new_title = update.title
-
-    new_done = existing["done"]
-    if update.done is not None:
-        new_done = 1 if update.done else 0
-
-    cursor.execute(
-        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
-        (new_title, new_done, task_id)
-    )
-    conn.commit()
-    conn.close()
-
-    return {"id": task_id, "title": new_title, "done": bool(new_done)}
 @app.delete("/tasks/{task_id}", status_code=204, summary="Delete a task")
 def delete_task(task_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM tasks WHERE id = ?", (task_id,))
-    existing = cursor.fetchone()
-
-    if existing is None:
-        conn.close()
+    deleted = repository.delete_task(task_id)
+    if not deleted:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-
-    cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-    conn.commit()
-    conn.close()
