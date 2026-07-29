@@ -96,6 +96,28 @@ Result:
 
 Note: no extra installation is needed for the database — Python's built-in sqlite3 module handles it.
 
+## Running with Docker Compose
+
+The whole stack (app + Postgres) starts with one command:
+
+docker compose up
+
+This builds the app image, starts Postgres with a persistent volume, and runs the API on http://localhost:8000. Connection details are read from `.env` (see `.env.example` for the required variables — copy it to `.env` and fill in your own values before running).
+
+### Architecture note
+
+The API and routes are unchanged from Assignment 2. Only the storage layer changed: a new `repository.py` file now talks to Postgres instead of SQLite, and `main.py` calls those repository functions without knowing what database sits underneath. This is the same architecture principle proven again, one layer down.
+
+### Persistence proof
+
+To confirm data survives a full restart of the stack:
+
+1. Created a task via POST /tasks
+2. Confirmed it with GET /tasks
+3. Stopped the entire stack (Ctrl+C on `docker compose up`, confirming both containers report "Stopped")
+4. Started the stack again with `docker compose up`
+5. Ran GET /tasks again — the task was still present, and Postgres logged "Database directory appears to contain a database; Skipping initialization," confirming the volume preserved the data rather than starting fresh
+
 ## Example request
 
 
